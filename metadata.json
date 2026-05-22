@@ -1,0 +1,6 @@
+{
+  "name": "StudySphere X",
+  "description": "A premium, cinematic student OS rebuilt for CBSE Class 10 Board preparation. Features chapter-wise syllabus, handwritten notes/PDFs, interactive MCQ quizzes, video lectures, board countdowns, and savage Sentinel AI study coaching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
