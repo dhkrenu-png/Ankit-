@@ -7,6 +7,9 @@ import express from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import { db } from "./src/db/index.ts";
+import { users, notes, workspaceFiles } from "./src/db/schema.ts";
+import { eq, and, desc } from "drizzle-orm";
 
 dotenv.config();
 
@@ -901,6 +904,165 @@ JSON Schema format:
       } else {
         res.json(handleLocalChat());
       }
+    }
+  });
+
+  // ==========================================
+  // CLOUD SQL & AUTH DATABASE SYNC API ROUTES
+  // ==========================================
+
+  // Endpoint to securely log authentication and OAuth failures on the server side
+  app.post("/api/auth/log-error", express.json(), (req, res) => {
+    const { code, message, stack, details } = req.body;
+    console.error("[SERVER AUTH ERROR LOG]:", {
+      timestamp: new Date().toISOString(),
+      code: code || "UNKNOWN_CODE",
+      message: message || "No error message provided",
+      stack: stack || "No stack trace",
+      details: details || {}
+    });
+    res.json({ success: true, logged: true });
+  });
+
+  // 1. Sync user or get local user ID
+  app.post("/api/auth/sync", async (req, res) => {
+    const { uid, email } = req.body;
+    if (!uid || !email) {
+      return res.status(400).json({ error: "Missing uid or email" });
+    }
+    try {
+      let user = await db.select().from(users).where(eq(users.uid, uid)).limit(1);
+      if (user.length === 0) {
+        const inserted = await db.insert(users).values({ uid, email }).returning();
+        user = inserted;
+      }
+      res.json({ success: true, userId: user[0].id, user: user[0] });
+    } catch (err: any) {
+      console.error("Failed to sync auth user:", err);
+      res.status(500).json({ error: "Database sync failed: " + err.message });
+    }
+  });
+
+  // 2. Get Keep Notes
+  app.get("/api/notes", async (req, res) => {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+    try {
+      const list = await db.select().from(notes)
+        .where(eq(notes.userId, Number(userId)))
+        .orderBy(desc(notes.isPinned), desc(notes.updatedAt));
+      res.json(list);
+    } catch (err: any) {
+      console.error("Failed to fetch notes:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create Keep Note
+  app.post("/api/notes", async (req, res) => {
+    const { userId, title, content, color, isPinned } = req.body;
+    if (!userId || !content) {
+      return res.status(400).json({ error: "Missing userId or content" });
+    }
+    try {
+      const newNote = await db.insert(notes).values({
+        userId: Number(userId),
+        title: title || "",
+        content,
+        color: color || "slate",
+        isPinned: !!isPinned,
+      }).returning();
+      res.json(newNote[0]);
+    } catch (err: any) {
+      console.error("Failed to create note:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Update Keep Note
+  app.put("/api/notes/:id", async (req, res) => {
+    const { id } = req.params;
+    const { title, content, color, isPinned } = req.body;
+    try {
+      const updated = await db.update(notes)
+        .set({
+          title: title !== undefined ? title : undefined,
+          content: content !== undefined ? content : undefined,
+          color: color !== undefined ? color : undefined,
+          isPinned: isPinned !== undefined ? !!isPinned : undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(notes.id, Number(id)))
+        .returning();
+      res.json(updated[0]);
+    } catch (err: any) {
+      console.error("Failed to update note:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Delete Keep Note
+  app.delete("/api/notes/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.delete(notes).where(eq(notes.id, Number(id)));
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Failed to delete note:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 3. Workspace / Picked Files
+  app.get("/api/workspace-files", async (req, res) => {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+    try {
+      const files = await db.select().from(workspaceFiles)
+        .where(eq(workspaceFiles.userId, Number(userId)))
+        .orderBy(desc(workspaceFiles.createdAt));
+      res.json(files);
+    } catch (err: any) {
+      console.error("Failed to fetch workspace files:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Add Picked File
+  app.post("/api/workspace-files", async (req, res) => {
+    const { userId, fileId, fileName, mimeType, webViewLink, iconLink } = req.body;
+    if (!userId || !fileId || !fileName) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    try {
+      const newFile = await db.insert(workspaceFiles).values({
+        userId: Number(userId),
+        fileId,
+        fileName,
+        mimeType,
+        webViewLink,
+        iconLink,
+      }).returning();
+      res.json(newFile[0]);
+    } catch (err: any) {
+      console.error("Failed to save workspace file:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Delete Picked File
+  app.delete("/api/workspace-files/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.delete(workspaceFiles).where(eq(workspaceFiles.id, Number(id)));
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Failed to delete workspace file:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 

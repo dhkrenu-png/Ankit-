@@ -10,6 +10,8 @@ export interface CalendarEvent {
   completed: boolean;
   time?: string;
   notes?: string;
+  priority?: 'low' | 'medium' | 'high';
+  recurring?: 'none' | 'daily' | 'weekly';
 }
 
 export interface AmbientSound {

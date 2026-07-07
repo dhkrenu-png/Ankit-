@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import SplashScreen from './components/SplashScreen';
+import SignUpScreen from './components/SignUpScreen';
 import BottomNavbar from './components/BottomNavbar';
 import HomeTab from './components/HomeTab';
 import FocusTab from './components/FocusTab';
@@ -19,6 +20,9 @@ import MusicTab from './components/MusicTab';
 import ProfileTab from './components/ProfileTab';
 import AITab from './components/AITab';
 
+import { auth } from './lib/googleAuth';
+import { onAuthStateChanged } from 'firebase/auth';
+
 import { AppTab, CalendarEvent, SongTrack, Achievement, FocusStreak } from './types';
 
 export default function App() {
@@ -26,26 +30,63 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [userAuraTheme, setUserAuraTheme] = useState<'cyan' | 'purple' | 'emerald' | 'pink'>('cyan');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [themeId, setThemeId] = useState<string>('night');
+  const [themeId, setThemeId] = useState<string>('glass');
+
+  const [isRegistered, setIsRegistered] = useState(() => {
+    return localStorage.getItem('zenith_registered') === 'true';
+  });
+
+  const [registeredUser, setRegisteredUser] = useState<{ email: string; fullName: string; username: string } | null>(() => {
+    const saved = localStorage.getItem('zenith_user');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   // Load appropriate theme mode based on local clock and shuffle on mount
   useEffect(() => {
-    const hour = new Date().getHours();
-    let clockTheme = 'night';
-    if (hour >= 5 && hour < 12) {
-      clockTheme = 'morning';
-    } else if (hour >= 12 && hour < 17) {
-      clockTheme = 'afternoon';
-    } else if (hour >= 17 && hour < 21) {
-      clockTheme = 'evening';
-    } else {
-      clockTheme = 'night';
-    }
-    
-    // Choose an initial random offset for extra aesthetic discovery
-    const aesthetics = ['cyberpunk', 'glass', 'minimal', clockTheme];
-    const picked = aesthetics[Math.floor(Math.random() * aesthetics.length)];
-    setThemeId(picked);
+    // Keep default theme to 'glass' as requested by Ankit Kumar's settings
+    setThemeId('glass');
+  }, []);
+
+  // Listen for Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsRegistered(true);
+        const saved = localStorage.getItem('zenith_user');
+        if (saved) {
+          try {
+            setRegisteredUser(JSON.parse(saved));
+          } catch (e) {
+            // Handle parsing error gracefully
+            const derivedUsername = (user.displayName || user.email?.split('@')[0] || 'zenith_member').toLowerCase().replace(/\s+/g, '_');
+            const derivedUser = {
+              email: user.email || '',
+              fullName: user.displayName || 'Zenith OS Member',
+              username: derivedUsername
+            };
+            setRegisteredUser(derivedUser);
+            localStorage.setItem('zenith_user', JSON.stringify(derivedUser));
+          }
+        } else {
+          const derivedUsername = (user.displayName || user.email?.split('@')[0] || 'zenith_member').toLowerCase().replace(/\s+/g, '_');
+          const derivedUser = {
+            email: user.email || '',
+            fullName: user.displayName || 'Zenith OS Member',
+            username: derivedUsername
+          };
+          setRegisteredUser(derivedUser);
+          localStorage.setItem('zenith_user', JSON.stringify(derivedUser));
+        }
+        localStorage.setItem('zenith_registered', 'true');
+      } else {
+        setIsRegistered(false);
+        setRegisteredUser(null);
+        localStorage.setItem('zenith_registered', 'false');
+        localStorage.removeItem('zenith_user');
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const shuffleTheme = () => {
@@ -67,50 +108,50 @@ export default function App() {
     }, 4500);
   };
 
-  // Core Streaks and statistics state
-  const [streak, setStreak] = useState(5);
-  const [focusMinutes, setFocusMinutes] = useState(45);
-  const [completedSessions, setCompletedSessions] = useState(3);
+  const IS_DEVELOPMENT = false;
 
-  // Calendar events pre-populated state
-  const [events, setEvents] = useState<CalendarEvent[]>([
-    {
-      id: 'event-1',
-      title: 'Revise Trigonometry Formulas & cheat sheet',
-      date: '2026-05-20',
-      type: 'task',
-      completed: false,
-      time: '10:30',
-      notes: 'Study trigonometric identities & solve 5 board proof questions'
-    },
-    {
-      id: 'event-2',
-      title: 'Practice Science Metal & Non-Metals MCQ paper',
-      date: '2026-05-20',
-      type: 'goal',
-      completed: true,
-      time: '14:00',
-      notes: 'Check real-time quiz inside subjects desk'
-    },
-    {
-      id: 'event-3',
-      title: 'CBSE SST Timeline Map Work revision',
-      date: '2026-05-19',
-      type: 'exam',
-      completed: true,
-      time: '09:00',
-      notes: 'Focus on Indian National Movement & Congress Sessions'
-    },
-    {
-      id: 'event-4',
-      title: 'Solve English Class 10 Board Letter writing sample',
-      date: '2026-05-21',
-      type: 'reminder',
-      completed: false,
-      time: '16:00',
-      notes: 'Use formal format templates from the Notes desk'
-    }
-  ]);
+  // Core Streaks and statistics state with persistent local storage initialization
+  const [streak, setStreak] = useState(() => {
+    const saved = localStorage.getItem('zenith_streak');
+    if (saved !== null) return Number(saved);
+    return IS_DEVELOPMENT ? 5 : 0;
+  });
+
+  const [focusMinutes, setFocusMinutes] = useState(() => {
+    const saved = localStorage.getItem('zenith_focus_minutes');
+    if (saved !== null) return Number(saved);
+    return IS_DEVELOPMENT ? 45 : 0;
+  });
+
+  const [completedSessions, setCompletedSessions] = useState(() => {
+    const saved = localStorage.getItem('zenith_completed_sessions');
+    if (saved !== null) return Number(saved);
+    return IS_DEVELOPMENT ? 3 : 0;
+  });
+
+  // Calendar events state initialized cleanly from local storage
+  const [events, setEvents] = useState<CalendarEvent[]>(() => {
+    const saved = localStorage.getItem('zenith_events');
+    if (saved !== null) return JSON.parse(saved);
+    return [];
+  });
+
+  // Local storage synchronization side effects
+  useEffect(() => {
+    localStorage.setItem('zenith_streak', String(streak));
+  }, [streak]);
+
+  useEffect(() => {
+    localStorage.setItem('zenith_focus_minutes', String(focusMinutes));
+  }, [focusMinutes]);
+
+  useEffect(() => {
+    localStorage.setItem('zenith_completed_sessions', String(completedSessions));
+  }, [completedSessions]);
+
+  useEffect(() => {
+    localStorage.setItem('zenith_events', JSON.stringify(events));
+  }, [events]);
 
   // Playlist pre-populated tracks state
   const [songs, setSongs] = useState<SongTrack[]>([
@@ -122,13 +163,36 @@ export default function App() {
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [isPlayingSong, setIsPlayingSong] = useState(false);
 
-  // Achievements state
-  const [achievements, setAchievements] = useState<Achievement[]>([
-    { id: 'ach-1', title: 'Study Starter', description: 'Log your first completed Pomodoro focus block today.', unlocked: true, icon: 'Zap' },
-    { id: 'ach-2', title: 'Steady Grind', description: 'Maintain an active 5-Day productive streak.', unlocked: true, icon: 'Award' },
-    { id: 'ach-3', title: 'Focus Champion', description: 'Exceed 100+ minutes of total study time.', unlocked: false, icon: 'Sparkles' },
-    { id: 'ach-4', title: 'Task Crusher', description: 'Complete 5 daily action goals in your study calendar.', unlocked: false, icon: 'CheckCircle2' }
-  ]);
+  // Achievements state initialized with local storage support
+  const [achievements, setAchievements] = useState<Achievement[]>(() => {
+    const saved = localStorage.getItem('zenith_achievements');
+    if (saved !== null) return JSON.parse(saved);
+    return [
+      { id: 'ach-1', title: 'Study Starter', description: 'Log your first completed Pomodoro focus block today.', unlocked: IS_DEVELOPMENT, icon: 'Zap' },
+      { id: 'ach-2', title: 'Steady Grind', description: 'Maintain an active 5-Day productive streak.', unlocked: IS_DEVELOPMENT, icon: 'Award' },
+      { id: 'ach-3', title: 'Focus Champion', description: 'Exceed 100+ minutes of total study time.', unlocked: false, icon: 'Sparkles' },
+      { id: 'ach-4', title: 'Task Crusher', description: 'Complete 5 daily action goals in your study calendar.', unlocked: false, icon: 'CheckCircle2' }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('zenith_achievements', JSON.stringify(achievements));
+  }, [achievements]);
+
+  const handleCleanSlate = () => {
+    localStorage.clear();
+    setStreak(0);
+    setFocusMinutes(0);
+    setCompletedSessions(0);
+    setEvents([]);
+    setAchievements([
+      { id: 'ach-1', title: 'Study Starter', description: 'Log your first completed Pomodoro focus block today.', unlocked: false, icon: 'Zap' },
+      { id: 'ach-2', title: 'Steady Grind', description: 'Maintain an active 5-Day productive streak.', unlocked: false, icon: 'Award' },
+      { id: 'ach-3', title: 'Focus Champion', description: 'Exceed 100+ minutes of total study time.', unlocked: false, icon: 'Sparkles' },
+      { id: 'ach-4', title: 'Task Crusher', description: 'Complete 5 daily action goals in your study calendar.', unlocked: false, icon: 'CheckCircle2' }
+    ]);
+    triggerToast("🚨 Zenith OS Core wiped successfully. Ready for clean slate calibration!");
+  };
 
   // AI Sentinel Assistant dialog state
   const [aiOpen, setAiOpen] = useState(false);
@@ -165,6 +229,10 @@ export default function App() {
 
   const handleDeleteEvent = (id: string) => {
     setEvents(prev => prev.filter(e => e.id !== id));
+  };
+
+  const handleUpdateEvent = (updated: CalendarEvent) => {
+    setEvents(prev => prev.map(e => e.id === updated.id ? updated : e));
   };
 
   const handleIncrementFocusMinutes = (mins: number) => {
@@ -345,6 +413,21 @@ export default function App() {
       <AnimatePresence mode="wait">
         {!isBooted ? (
           <SplashScreen key="splash" onComplete={() => setIsBooted(true)} />
+        ) : !isRegistered ? (
+          <SignUpScreen 
+            key="signup"
+            onSuccess={(userData) => {
+              setRegisteredUser(userData);
+              localStorage.setItem('zenith_user', JSON.stringify(userData));
+              localStorage.setItem('zenith_registered', 'true');
+              setIsRegistered(true);
+              triggerToast(`Welcome to Zenith OS, ${userData.fullName}! Connection established.`);
+            }}
+            onGoogleSignIn={async () => {
+              const { googleSignIn } = await import('./lib/googleAuth');
+              return await googleSignIn();
+            }}
+          />
         ) : (
           /* PREMIUM DEV SHELL CARD MOCKUP WITH AMBIENT BACKROUND NEBULAS */
           <motion.div
@@ -394,8 +477,8 @@ export default function App() {
                   animate={{ scale: [1, 1.3, 1], opacity: [0.6, 1, 0.6] }}
                   transition={{ duration: 2.5, repeat: Infinity }}
                 />
-                <span className="text-xs font-mono tracking-widest font-extrabold uppercase">
-                  STUDY<span className="text-amber-400">SPHERE X</span>
+                <span className="text-xs font-mono tracking-widest font-black uppercase">
+                  ZENITH<span className="text-cyan-400"> OS</span>
                 </span>
                 <button
                   id="btn_wand_theme_cycle"
@@ -434,6 +517,9 @@ export default function App() {
                     onToggleEvent={handleToggleEvent}
                     activeSong={isPlayingSong ? { ...activeSong, isPlaying: isPlayingSong } : null}
                     onTogglePlaySong={() => setIsPlayingSong(!isPlayingSong)}
+                    IS_DEVELOPMENT={IS_DEVELOPMENT}
+                    activityCount={completedSessions + events.length}
+                    userName={registeredUser ? registeredUser.fullName.split(' ')[0] : "Ankit"}
                   />
                 )}
                 {activeTab === 'focus' && (
@@ -452,6 +538,7 @@ export default function App() {
                     onAddEvent={handleAddEvent}
                     onToggleEvent={handleToggleEvent}
                     onDeleteEvent={handleDeleteEvent}
+                    onUpdateEvent={handleUpdateEvent}
                   />
                 )}
                 {activeTab === 'music' && (
@@ -472,6 +559,7 @@ export default function App() {
                     streak={streak}
                     onTabChange={setActiveTab}
                     themeId={themeId}
+                    userName={registeredUser ? registeredUser.fullName.split(' ')[0] : "Ankit"}
                   />
                 )}
                 {activeTab === 'profile' && (
@@ -484,12 +572,21 @@ export default function App() {
                       completedSessions: completedSessions
                     }}
                     achievements={achievements}
-                    userName="Aria Chen"
+                    userName={registeredUser ? registeredUser.fullName : "Ankit Kumar"}
                     userAuraTheme={userAuraTheme}
                     onChangeAuraTheme={setUserAuraTheme}
                     themeId={themeId}
                     onChangeThemeId={setThemeId}
                     onShuffleTheme={shuffleTheme}
+                    IS_DEVELOPMENT={IS_DEVELOPMENT}
+                    onCleanSlate={handleCleanSlate}
+                    activityCount={completedSessions + events.length}
+                    completedTasksCount={events.filter(e => e.completed).length}
+                    onLogout={async () => {
+                      const { logout } = await import('./lib/googleAuth');
+                      await logout();
+                      triggerToast('Safe termination of Zenith Core session complete.');
+                    }}
                   />
                 )}
               </AnimatePresence>

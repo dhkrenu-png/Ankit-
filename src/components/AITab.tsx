@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Bot, Flame, Zap, Sparkles, MessageSquare, Send, RefreshCw, 
   X, AlertCircle, Play, Sliders, Volume2, Award, ShieldAlert,
-  Frown, Compass, Star, ChevronRight, Brain, Smile, Skull
+  Frown, Compass, Star, ChevronRight, Brain, Smile, Skull, Mic, Download
 } from 'lucide-react';
 import { AppTab } from '../types';
 
@@ -18,9 +18,10 @@ interface AITabProps {
   streak: number;
   onTabChange: (tab: AppTab) => void;
   themeId?: string;
+  userName?: string;
 }
 
-export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'night' }: AITabProps) {
+export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'night', userName = 'Ankit' }: AITabProps) {
   // Savage Hindi Roasts list
   const roasts = [
     { text: "Bhai phone ki battery se zyada low tumhari productivity hai 💀", mood: "Savage" },
@@ -62,9 +63,17 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
   const [activeRoast, setActiveRoast] = useState(roasts[0]);
   const [scrollHours, setScrollHours] = useState(3);
   const [chatInput, setChatInput] = useState('');
-  const [aiMood, setAiMood] = useState<'helpful' | 'sarcastic' | 'motivational'>('sarcastic');
-  const [chatLog, setChatLog] = useState<{ sender: 'user' | 'bot'; text: string; mode?: string }[]>([
-    { sender: 'bot', text: "Ayan, swagat hai Class 10 Board Warrior! Main hoon tumhara Savage Sentinel AI coach. Board exam paas aa raha hai, isiliye Reels kam karo, Science/Maths revise karo aur mujhse real-time reality checks lo! 💀⚡", mode: "Board Sentinel Core" }
+  const [aiMood, setAiMood] = useState<'helpful' | 'sarcastic' | 'motivational' | 'auto'>('auto');
+
+  // Dynamic Cognitive Coach Switch based on actual study performance (STRICT MENTOR vs EMPATHETIC GUIDE)
+  const resolvedMood = aiMood === 'auto' 
+    ? (focusMinutes < 25 || streak === 0 ? 'sarcastic' : 'helpful') 
+    : aiMood;
+
+  const [chatLog, setChatLog] = useState<{ sender: 'user' | 'bot'; text: string; mode?: string }[]>(() => [
+    { sender: 'bot', text: `${userName}, swagat hai Class 10 Board Warrior! Main hoon tumhara Savage Sentinel AI coach. Board exam paas aa raha hai, isiliye Reels kam karo, Science/Maths revise karo aur mujhse real-time reality checks lo! 💀⚡`, mode: "Board Sentinel Core" },
+    { sender: 'user', text: "Bhai, focus nahi ho raha, bohot reels scroll ho gayi hain aaj..." },
+    { sender: 'bot', text: "Itni mehnat toh main Einstein ke liye bhi nahi karta, jitni tum reels scroll karne mein kar rahe ho! 💀", mode: "Savage Mode Roast" }
   ]);
   const [orbState, setOrbState] = useState<'idle' | 'burning' | 'talking'>('idle');
   const [isTyping, setIsTyping] = useState(false);
@@ -74,6 +83,87 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
   const [customPrompt, setCustomPrompt] = useState('');
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
+
+  // New Voice Features, Models, & Immersive modes
+  const [voiceOnlyMode, setVoiceOnlyMode] = useState(false);
+  const [selectedVoiceOption, setSelectedVoiceOption] = useState<'indian-male' | 'indian-female' | 'formal-uk' | 'casual-us' | 'funny-indian' | 'custom-model'>('funny-indian');
+  const [customVoiceModels, setCustomVoiceModels] = useState<Array<{id: string, name: string, pitch: number, rate: number, isSelected: boolean}>>([
+    { id: 'custom-1', name: 'Standard CBSE Coach (Pre-trained)', pitch: 0.98, rate: 0.95, isSelected: true },
+    { id: 'custom-2', name: 'Satyajit Ray Accent (Classic Baritone)', pitch: 0.72, rate: 0.88, isSelected: false },
+    { id: 'custom-3', name: 'Super Energetic Tutor (Hyper Rate)', pitch: 1.35, rate: 1.25, isSelected: false }
+  ]);
+
+  // Speech Recognition States & Initialization
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = 'en-IN'; // Indian-English localized capture
+
+        rec.onstart = () => {
+          setIsListening(true);
+        };
+
+        rec.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          if (transcript) {
+            setChatInput(prev => (prev ? prev + ' ' + transcript : transcript));
+            triggerLocalAlert(`Decoded Voice Input: "${transcript}"`);
+          }
+        };
+
+        rec.onerror = (e: any) => {
+          console.error("SpeechRecognition error:", e);
+          setIsListening(false);
+          triggerLocalAlert("Voice input timeout or noise. Speak again!");
+        };
+
+        rec.onend = () => {
+          setIsListening(false);
+        };
+
+        recognitionRef.current = rec;
+      }
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      triggerLocalAlert("Speech recognition not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        recognitionRef.current.start();
+        triggerLocalAlert("🎤 Sentinel AI is listening... Speak now!");
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  // Helper trigger alerts in AITab
+  const triggerLocalAlert = (msg: string) => {
+    const alertEvent = new CustomEvent('local-alert', { detail: msg });
+    window.dispatchEvent(alertEvent);
+  };
+
+  useEffect(() => {
+    const handleLocalAlert = (e: any) => {
+      // We can hook to home page alert if needed, or simply let console and toast know
+    };
+    window.addEventListener('local-alert', handleLocalAlert);
+    return () => window.removeEventListener('local-alert', handleLocalAlert);
+  }, []);
 
   // Load Speech Voices
   useEffect(() => {
@@ -96,41 +186,85 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
     let cleanText = text.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, '');
     cleanText = cleanText.replace(/[💀😭👀😴📉😂✨🔥🏆🏆🏆🌌🔥⚡]/g, '').trim();
     
+    let pitch = 1.0;
+    let rate = 1.0;
+    let langCode = 'en-IN';
+
+    if (selectedVoiceOption === 'funny-indian') {
+      const funnyPhrases = [
+        "Arey suno beta! ",
+        "Arre topper sahab, swagat hai! ",
+        "Arey yaar, listen carefully! ",
+        "Oye board champion, hear me out! "
+      ];
+      const selectedPhrase = funnyPhrases[Math.floor(Math.random() * funnyPhrases.length)];
+      cleanText = selectedPhrase + cleanText;
+
+      cleanText = cleanText
+        .replace(/\bstudy\b/gi, 'iss-tudy')
+        .replace(/\bexam\b/gi, 'ejaam')
+        .replace(/\bexams\b/gi, 'ejaams')
+        .replace(/\bboard\b/gi, 'boorad')
+        .replace(/\bboards\b/gi, 'boorads')
+        .replace(/\bpreps\b/gi, 'pir-pations')
+        .replace(/\bpreparation\b/gi, 'pir-pation')
+        .replace(/\bmarks\b/gi, 'maarks')
+        .replace(/\bclass\b/gi, 'kelaas')
+        .replace(/\bsyllabus\b/gi, 'sillabus');
+
+      pitch = 1.6;  // Hilariously high caricaturish pitch
+      rate = 0.95;  // Energetic fast/slow uncle speed
+      langCode = 'en-IN';
+    } else if (selectedVoiceOption === 'indian-male') {
+      pitch = 0.92;
+      rate = 0.92;
+      langCode = 'en-IN';
+    } else if (selectedVoiceOption === 'indian-female') {
+      pitch = 1.15;
+      rate = 1.02;
+      langCode = 'en-IN';
+    } else if (selectedVoiceOption === 'formal-uk') {
+      pitch = 1.0;
+      rate = 0.92;
+      langCode = 'en-GB';
+    } else if (selectedVoiceOption === 'casual-us') {
+      pitch = 1.05;
+      rate = 1.05;
+      langCode = 'en-US';
+    } else if (selectedVoiceOption === 'custom-model') {
+      const selectedModel = customVoiceModels.find(m => m.isSelected) || customVoiceModels[0];
+      pitch = selectedModel.pitch;
+      rate = selectedModel.rate;
+    }
+
     const utterance = new SpeechSynthesisUtterance(cleanText);
     const voices = window.speechSynthesis.getVoices();
-    
-    // Find Indian English Male voice
+
     let voice = voices.find(v => 
-      (v.lang.toLowerCase().includes('in') || v.lang.toLowerCase().includes('hi-in')) &&
-      (v.name.toLowerCase().includes('ravi') || v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('karan') || v.name.toLowerCase().includes('dilip'))
+      v.lang.toLowerCase().includes(langCode.toLowerCase()) &&
+      (selectedVoiceOption === 'indian-female' ? v.name.toLowerCase().includes('female') : true)
     );
-    
+
     if (!voice) {
-      // Find any Indian English / Hindi voice
       voice = voices.find(v => v.lang.toLowerCase().includes('in') || v.lang.toLowerCase().includes('india') || v.lang.startsWith('hi'));
     }
-    
-    if (!voice) {
-      // Find any male English voice
-      voice = voices.find(v => v.lang.startsWith('en') && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('google')));
-    }
-    
     if (!voice) {
       voice = voices.find(v => v.lang.startsWith('en')) || voices[0];
     }
-    
+
     if (voice) {
       utterance.voice = voice;
     }
+
+    utterance.pitch = pitch;
+    utterance.rate = rate;
     
-    utterance.pitch = 0.95; // Deeper male-like tone
-    utterance.rate = 0.92;  // Natural steady speed
     window.speechSynthesis.speak(utterance);
   };
 
   const getPlaceholder = () => {
-    if (aiMood === 'helpful') return "Ask study help, formulas...";
-    if (aiMood === 'motivational') return "Ask for high warrior energy...";
+    if (resolvedMood === 'helpful') return "Ask study help, formulas...";
+    if (resolvedMood === 'motivational') return "Ask for high warrior energy...";
     return "Ask to get roasted 💀...";
   };
 
@@ -236,7 +370,7 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
           scrollHours: scrollHours,
           focusMinutes: focusMinutes,
           streak: streak,
-          mood: aiMood,
+          mood: resolvedMood,
           customPrompt: customPrompt,
           customTraits: customTraits
         })
@@ -270,7 +404,7 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
           : "[Simulated Custom Target]";
         responseText = `${customAdlib} Understood your custom setup! As you directed me to prioritize "${customPrompt || customTraits}", let's crush your Class 10 syllabus right now. Close extra screens and let's get focused! ✨`;
         mood = "Custom Aura Lab";
-      } else if (aiMood === 'helpful') {
+      } else if (resolvedMood === 'helpful') {
         mood = "Helpful Guide 🧠";
         if (query.includes('lazy') || query.includes('scrolling') || query.includes('procrastinate')) {
           responseText = "Hey, it looks like you are struggling to stay focused and scrolling instead. No worries, let's start small. Try declaring a 10-minute focus span, keep your phone far away, and revise just one chapter topic. You can do this!";
@@ -281,7 +415,7 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
         } else {
           responseText = "I'm here to help you guide your revision strategy! Try asking me about study schedules, boards advice, formulas, or how to break down your Science backlog.";
         }
-      } else if (aiMood === 'motivational') {
+      } else if (resolvedMood === 'motivational') {
         mood = "Warrior Fuel 🔥";
         if (query.includes('lazy') || query.includes('scrolling') || query.includes('procrastinate')) {
           responseText = "Your study streak has immense power, and today is your battleground! Shut down the scroll now and let your inner warrior take command! Rise up and build your elite future! ⚡";
@@ -339,6 +473,136 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
   const textChatBot = isLightTheme ? 'text-slate-800' : 'text-slate-200';
   const inputBg = isLightTheme ? 'bg-slate-100 text-slate-950 border-slate-300 focus:border-indigo-400 placeholder-slate-400' : 'bg-[#020617]/40 text-white border-white/10 focus:border-fuchsia-500/40 placeholder-slate-500';
 
+  if (voiceOnlyMode) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.98 }}
+        className={`pb-32 space-y-8 pt-6 px-5 max-w-sm mx-auto select-none font-sans text-center ${textBase}`}
+      >
+        {/* Header with return button */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setVoiceOnlyMode(false)}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              isLightTheme ? 'bg-slate-100 hover:bg-slate-200 text-slate-800' : 'bg-white/5 hover:bg-white/10 text-slate-200'
+            }`}
+          >
+            <ChevronRight className="w-4 h-4 rotate-180" /> Back to Chat
+          </button>
+          <div className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+            <span className="text-[9px] font-mono uppercase tracking-widest text-red-400 font-bold">IMMERSIVE_VOICE</span>
+          </div>
+        </div>
+
+        {/* Ambient Pulsing Orb */}
+        <div className="flex flex-col items-center justify-center py-10 space-y-8 relative">
+          <div className="absolute inset-0 bg-gradient-to-t from-fuchsia-500/5 to-blue-500/5 blur-3xl pointer-events-none rounded-full" />
+          
+          <div className="w-52 h-52 flex items-center justify-center relative">
+            {/* Multiple nested pulsating glowing rings */}
+            <motion.div
+              animate={{
+                scale: isListening ? [1, 1.4, 1] : [1, 1.15, 1],
+                opacity: isListening ? [0.4, 0.8, 0.4] : [0.2, 0.4, 0.2],
+              }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              className="absolute inset-0 rounded-full bg-gradient-to-r from-fuchsia-500/30 via-purple-600/20 to-cyan-400/30 blur-2xl"
+            />
+            <motion.div
+              animate={{
+                scale: isListening ? [1, 1.25, 1] : [1, 1.1, 1],
+                opacity: isListening ? [0.6, 0.9, 0.6] : [0.3, 0.5, 0.3],
+                rotate: 360,
+              }}
+              transition={{
+                scale: { duration: 1.8, repeat: Infinity, ease: 'easeInOut' },
+                rotate: { duration: 10, repeat: Infinity, ease: 'linear' }
+              }}
+              className="absolute w-44 h-44 rounded-full border-2 border-dashed border-fuchsia-500/40"
+            />
+
+            {/* Core Orb speaking/listening */}
+            <motion.button
+              onClick={toggleListening}
+              animate={{
+                scale: isListening ? 1.08 : 1,
+              }}
+              className={`w-36 h-36 rounded-full bg-gradient-to-tr from-fuchsia-500 via-purple-600 to-cyan-400 p-1 flex items-center justify-center shadow-[0_0_60px_rgba(217,70,239,0.5)] cursor-pointer hover:scale-105 active:scale-95 transition-all`}
+            >
+              <div className={`w-full h-full rounded-full flex flex-col items-center justify-center backdrop-blur-lg ${isLightTheme ? 'bg-white/95 text-slate-800' : 'bg-[#020617]/95 text-white'}`}>
+                {isListening ? (
+                  <div className="space-y-1.5 flex flex-col items-center justify-center">
+                    <div className="flex gap-1 items-end justify-center h-8">
+                      <span className="w-1.5 bg-fuchsia-500 rounded-full animate-bounce h-5" />
+                      <span className="w-1.5 bg-purple-500 rounded-full animate-bounce h-8 delay-75" />
+                      <span className="w-1.5 bg-cyan-400 rounded-full animate-bounce h-6 delay-150" />
+                      <span className="w-1.5 bg-pink-500 rounded-full animate-bounce h-4 delay-225" />
+                    </div>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-fuchsia-400 font-bold">Listening</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center space-y-1">
+                    <Mic className="w-10 h-10 text-fuchsia-400 animate-pulse" />
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-slate-400">TAP TO SPEAK</span>
+                  </div>
+                )}
+              </div>
+            </motion.button>
+          </div>
+
+          <div className="space-y-2 max-w-xs mx-auto">
+            <h4 className={`text-md font-sans font-extrabold tracking-tight ${textTitle}`}>
+              {isListening ? "Listening for your voice..." : "Sentinel AI Voice Assistant"}
+            </h4>
+            <p className="text-xs text-slate-400 leading-relaxed px-4">
+              {isListening 
+                ? "Speak your CBSE math doubts, syllabus targets, or scroll updates clearly..." 
+                : "Tap the central glowing orb to start speaking. Coach replies automatically using your selected voice accent!"
+              }
+            </p>
+          </div>
+        </div>
+
+        {/* Selected Voice Config Info Bar */}
+        <div className={`p-4 rounded-2xl border text-left ${bgPanel}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Volume2 className="w-4 h-4 text-fuchsia-400" />
+              <span className="text-[11px] font-mono uppercase tracking-wider font-bold">Active Voice Model:</span>
+            </div>
+            <span className="text-[10px] font-mono bg-fuchsia-500/10 text-fuchsia-400 px-2 py-0.5 rounded-full font-bold uppercase">
+              {selectedVoiceOption.replace('-', ' ')}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400">
+            <div className="p-2.5 rounded-xl bg-white/3 border border-white/5">
+              <span className="block font-mono text-[8px] text-slate-500 uppercase">Interactive Accent:</span>
+              <span className="font-sans font-bold text-slate-200">
+                {selectedVoiceOption === 'funny-indian' && "🤪 Funny Indian (Uncle)"}
+                {selectedVoiceOption === 'indian-male' && "👨 Indian Male Accent"}
+                {selectedVoiceOption === 'indian-female' && "👩 Indian Female Accent"}
+                {selectedVoiceOption === 'formal-uk' && "🎩 Formal British"}
+                {selectedVoiceOption === 'casual-us' && "🎙️ Casual American"}
+                {selectedVoiceOption === 'custom-model' && "🎛️ Custom Weights"}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/3 border border-white/5">
+              <span className="block font-mono text-[8px] text-slate-500 uppercase">Response Mood Style:</span>
+              <span className="font-sans font-bold text-slate-200 capitalize font-medium">
+                {aiMood === 'auto' 
+                  ? `🤖 AUTO (${resolvedMood === 'sarcastic' ? 'Strict Mentor' : 'Empathetic Guide'})` 
+                  : `${aiMood} Style`}
+              </span>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -358,9 +622,25 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
             <p className="text-[9px] font-mono tracking-widest text-fuchsia-500 font-bold uppercase">SYS_MOTIVATOR_ROAST</p>
           </div>
         </div>
-        <div className="flex items-center gap-1 bg-fuchsia-500/10 border border-fuchsia-500/20 px-2.5 py-1 rounded-full">
-          <Flame className="w-3.5 h-3.5 text-fuchsia-500 animate-pulse" />
-          <span className="text-[9px] font-mono text-fuchsia-500 font-bold uppercase">SAVAGE LEVEL: MAX</span>
+        <div className="flex items-center gap-2">
+          {/* Toggle Full Voice-Only mode switch button */}
+          <button
+            id="toggle_voice_only_mode"
+            type="button"
+            onClick={() => {
+              setVoiceOnlyMode(true);
+              triggerLocalAlert("Switched to Full Immersive Voice-Only mode! 🎙️");
+            }}
+            className={`flex items-center gap-1 bg-fuchsia-500/10 border border-fuchsia-500/20 px-2.5 py-1 rounded-full hover:bg-fuchsia-500/20 transition-all cursor-pointer`}
+          >
+            <Mic className="w-3 h-3 text-fuchsia-400 animate-pulse" />
+            <span className="text-[9px] font-mono text-fuchsia-400 font-bold uppercase">Voice Only</span>
+          </button>
+          
+          <div className="flex items-center gap-1 bg-fuchsia-500/10 border border-fuchsia-500/20 px-2.5 py-1 rounded-full">
+            <Flame className="w-3.5 h-3.5 text-fuchsia-500 animate-pulse" />
+            <span className="text-[9px] font-mono text-fuchsia-500 font-bold uppercase">SAVAGE LEVEL: MAX</span>
+          </div>
         </div>
       </div>
 
@@ -526,11 +806,11 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
             </div>
 
             {/* Speech synthesis Indian accent segment */}
-            <div className="space-y-2 pt-2 border-t border-white/5">
+            <div className="space-y-3 pt-2 border-t border-white/5">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-1.5">
                   <Volume2 className="w-3.5 h-3.5 text-teal-400" />
-                  <span className="text-[10px] font-mono text-slate-400 uppercase font-bold">🇮🇳 Indian Male Speak Accent:</span>
+                  <span className="text-[10px] font-mono text-slate-400 uppercase font-bold">Configure AI Voice Output:</span>
                 </div>
                 <button
                   type="button"
@@ -544,17 +824,96 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
                   {autoSpeak ? "ON (Auto)" : "OFF"}
                 </button>
               </div>
-              <p className="text-[9px] text-slate-400 leading-normal">
-                Converts bot replies into speech. Click below to test or configure manually.
-              </p>
-              
+
+              {/* Voice select dropdown menu */}
+              <div className="space-y-1">
+                <label htmlFor="voice_select_dropdown" className="text-[9px] font-mono text-slate-400 uppercase font-bold block">
+                  Select AI Voice Option:
+                </label>
+                <select
+                  id="voice_select_dropdown"
+                  value={selectedVoiceOption}
+                  onChange={(e) => setSelectedVoiceOption(e.target.value as any)}
+                  className={`w-full rounded-xl px-3 py-1.5 text-xs font-sans outline-none border transition-all ${inputBg}`}
+                >
+                  <option value="funny-indian">🤪 Funny Indian Voice (Savage Uncle)</option>
+                  <option value="indian-male">👨 Indian Male Voice</option>
+                  <option value="indian-female">👩 Indian Female Voice</option>
+                  <option value="formal-uk">🎩 Formal British Voice</option>
+                  <option value="casual-us">🎙️ Casual US Voice</option>
+                  <option value="custom-model">🎛️ Custom Voice Model</option>
+                </select>
+              </div>
+
+              {/* Custom Voice Models selection and upload weights */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[9px] font-mono text-slate-400 uppercase font-bold block">Custom Voice Models Weights:</span>
+                <div className="space-y-1 max-h-[85px] overflow-y-auto pr-1">
+                  {customVoiceModels.map((model) => (
+                    <div
+                      key={model.id}
+                      onClick={() => {
+                        setCustomVoiceModels(prev => prev.map(m => ({ ...m, isSelected: m.id === model.id })));
+                        setSelectedVoiceOption('custom-model');
+                        triggerLocalAlert(`Activated voice model: "${model.name}"`);
+                      }}
+                      className={`p-1.5 rounded-xl border text-[10px] font-sans flex items-center justify-between cursor-pointer transition-all ${
+                        model.isSelected && selectedVoiceOption === 'custom-model'
+                          ? 'bg-fuchsia-500/10 border-fuchsia-500/35 text-fuchsia-300'
+                          : 'bg-white/3 border-white/5 text-slate-400 hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="font-medium truncate max-w-[170px]">{model.name}</span>
+                      <span className="text-[8px] font-mono text-slate-500 uppercase">P:{model.pitch} R:{model.rate}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-1">
+                  <label htmlFor="custom_voice_file_upload" className="w-full py-1.5 rounded-xl bg-white/3 hover:bg-white/5 border border-white/10 hover:border-white/15 text-[10px] font-mono text-slate-300 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <Download className="w-3.5 h-3.5 text-slate-400 rotate-180" />
+                    <span>Upload custom voice model (.weights)</span>
+                  </label>
+                  <input
+                    id="custom_voice_file_upload"
+                    type="file"
+                    accept=".weights,.vmdl,.bin,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        triggerLocalAlert(`Uploading weights: "${file.name}"... decoding spectrogram!`);
+                        setTimeout(() => {
+                          const newId = `custom-voice-${Date.now()}`;
+                          const randomPitch = parseFloat((Math.random() * 0.6 + 0.6).toFixed(2));
+                          const randomRate = parseFloat((Math.random() * 0.4 + 0.8).toFixed(2));
+                          const newModel = {
+                            id: newId,
+                            name: `👤 ${file.name.split('.')[0]} (Custom)`,
+                            pitch: randomPitch,
+                            rate: randomRate,
+                            isSelected: true
+                          };
+                          setCustomVoiceModels(prev => {
+                            const cleared = prev.map(m => ({ ...m, isSelected: false }));
+                            return [...cleared, newModel];
+                          });
+                          setSelectedVoiceOption('custom-model');
+                          triggerLocalAlert(`Successfully mapped custom model "${file.name}" into real-time speech! try it now! ✨`);
+                        }, 1000);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
               <button
                 type="button"
                 id="btn_test_speech_synth"
-                onClick={() => speakText("Hey board champion! Welcome back. Stop scrolling and let's conquer your syllabus today!")}
+                onClick={() => speakText("Suno board champions! Stay focused and write history today!")}
                 className="w-full py-1.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/20 text-[10px] font-mono uppercase font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
               >
-                <Play className="w-3 h-3" /> Preview Indian Voice Sample
+                <Play className="w-3 h-3" /> Preview Selected Accent
               </button>
             </div>
           </div>
@@ -879,19 +1238,36 @@ export default function AITab({ focusMinutes, streak, onTabChange, themeId = 'ni
                 : 'bg-slate-950/80 text-slate-200 border-white/10 focus:border-fuchsia-500/40'
             }`}
           >
-            <option value="sarcastic">💀 Sarcastic</option>
-            <option value="helpful">🧠 Helpful</option>
-            <option value="motivational">🔥 Motive</option>
+            <option value="auto">🤖 Auto-Switch</option>
+            <option value="sarcastic">💀 Strict Mentor</option>
+            <option value="helpful">🌸 Empathetic</option>
+            <option value="motivational">🔥 Warrior</option>
           </select>
 
-          <input
-            id="input_savage_prompt"
-            type="text"
-            placeholder={getPlaceholder()}
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            className={`flex-1 min-w-0 rounded-xl px-4 py-2 text-xs font-sans outline-none transition-all ${inputBg}`}
-          />
+          <div className="relative flex-1 min-w-0">
+            <input
+              id="input_savage_prompt"
+              type="text"
+              placeholder={getPlaceholder()}
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              className={`w-full rounded-xl pl-4 pr-10 py-2 text-xs font-sans outline-none transition-all ${inputBg}`}
+            />
+            {/* Dictation voice input button */}
+            <button
+              id="btn_dictate_speech"
+              type="button"
+              onClick={toggleListening}
+              className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-all ${
+                isListening 
+                  ? 'bg-red-500/20 text-red-500 animate-pulse' 
+                  : 'text-slate-400 hover:text-fuchsia-400'
+              }`}
+              title="Dictate message with voice recognition"
+            >
+              <Mic className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <button
             id="btn_submit_savage_prompt"
             type="submit"

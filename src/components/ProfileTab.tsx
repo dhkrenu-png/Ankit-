@@ -10,7 +10,12 @@ import {
   Settings, HelpCircle, Palette, Sparkles, Sliders, ChevronRight,
   Flame, Calendar, TrendingUp, PieChart, Users, Check
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid 
+} from 'recharts';
 import { Achievement, FocusStreak } from '../types';
+
+import { useEffect } from 'react';
 
 interface ProfileTabProps {
   key?: string;
@@ -22,6 +27,11 @@ interface ProfileTabProps {
   themeId?: string;
   onChangeThemeId?: (themeId: string) => void;
   onShuffleTheme?: () => void;
+  IS_DEVELOPMENT: boolean;
+  onCleanSlate: () => void;
+  activityCount: number;
+  completedTasksCount: number;
+  onLogout?: () => void;
 }
 
 export default function ProfileTab({
@@ -32,37 +42,83 @@ export default function ProfileTab({
   onChangeAuraTheme,
   themeId = 'night',
   onChangeThemeId,
-  onShuffleTheme
+  onShuffleTheme,
+  IS_DEVELOPMENT,
+  onCleanSlate,
+  activityCount,
+  completedTasksCount,
+  onLogout
 }: ProfileTabProps) {
+  // ZENITH RANKING ENGINE FORMULAS (Base Score = Completed * 10 + Streak * 5, Efficiency = Completed/Total * 100, Final = Base * (1 + Eff/100))
+  const totalCompleted = completedTasksCount;
+  const streakDays = streakState.current;
+  const baseScore = (totalCompleted * 10) + (streakDays * 5);
+  const totalTasksCountForEfficiency = Math.max(activityCount, 1);
+  const efficiency = Math.round((totalCompleted / totalTasksCountForEfficiency) * 100);
+  const finalRankScore = Math.round(baseScore * (1 + efficiency / 100));
+
+  const getRankDetails = (score: number) => {
+    if (score < 50) return { name: 'Bronze', color: 'text-amber-600', border: 'border-amber-600/30', bg: 'from-amber-600/5 to-transparent', icon: '🥉' };
+    if (score < 150) return { name: 'Silver', color: 'text-slate-300', border: 'border-slate-300/30', bg: 'from-slate-300/5 to-transparent', icon: '🥈' };
+    if (score < 300) return { name: 'Gold', color: 'text-yellow-400', border: 'border-yellow-400/30', bg: 'from-yellow-400/5 to-transparent', icon: '🥇' };
+    if (score < 500) return { name: 'Diamond', color: 'text-cyan-400', border: 'border-cyan-400/30', bg: 'from-cyan-400/5 to-transparent', icon: '💎' };
+    if (score < 750) return { name: 'Master', color: 'text-purple-400', border: 'border-purple-400/30', bg: 'from-purple-400/5 to-transparent', icon: '🌌' };
+    if (score < 1000) return { name: 'Legend', color: 'text-red-500', border: 'border-red-500/30', bg: 'from-red-500/5 to-transparent', icon: '🏆' };
+    return { name: 'Zenith', color: 'text-fuchsia-400', border: 'border-fuchsia-400/40', bg: 'from-fuchsia-400/10 to-transparent', icon: '👑' };
+  };
+
+  const currentRank = getRankDetails(finalRankScore);
+
   // Gamified Study XP State & Leaderboard declarations
-  const [userXP, setUserXP] = useState(2450);
+  const initialXP = IS_DEVELOPMENT
+    ? 2450
+    : finalRankScore;
+
+  const [userXP, setUserXP] = useState(initialXP);
   const [missionClaimed, setMissionClaimed] = useState(false);
   const [rewardClaiming, setRewardClaiming] = useState(false);
-  const [leaderboard, setLeaderboard] = useState([
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
+
+  useEffect(() => {
+    if (!IS_DEVELOPMENT) {
+      setUserXP(finalRankScore);
+    }
+  }, [finalRankScore, IS_DEVELOPMENT]);
+
+  const baseLeaderboard = [
+    { name: 'Sankalp Kumar', xp: 3200, status: 'online' },
+    { name: 'Ananya Sharma', xp: 2850, status: 'offline' },
+    { name: 'Shreya Iyer', xp: 2100, status: 'offline' },
+    { name: 'Virat Sen', xp: 1950, status: 'online' }
+  ];
+
+  const leaderboard = IS_DEVELOPMENT ? [
     { rank: 1, name: 'Sankalp Kumar', xp: 3200, status: 'online' },
     { rank: 2, name: 'Ananya Sharma', xp: 2850, status: 'offline' },
-    { rank: 3, name: 'Aria Chen (You)', xp: 2450, status: 'online' },
+    { rank: 3, name: `${userName} (You)`, xp: userXP, status: 'online' },
     { rank: 4, name: 'Shreya Iyer', xp: 2100, status: 'offline' },
     { rank: 5, name: 'Virat Sen', xp: 1950, status: 'online' }
-  ]);
+  ].sort((a, b) => b.xp - a.xp).map((item, idx) => ({ ...item, rank: idx + 1 }))
+  : [
+    ...baseLeaderboard,
+    { name: `${userName} (You)`, xp: userXP, status: 'online' }
+  ].sort((a, b) => b.xp - a.xp)
+   .map((item, idx) => ({ ...item, rank: idx + 1 }));
 
   const handleClaimReward = () => {
     if (missionClaimed) return;
     setRewardClaiming(true);
     setTimeout(() => {
       setUserXP(prev => prev + 150);
-      setLeaderboard(prev => 
-        prev.map(item => item.name.includes('(You)') ? { ...item, xp: item.xp + 150 } : item)
-             .sort((a,b) => b.xp - a.xp)
-             .map((item, idx) => ({ ...item, rank: idx + 1 }))
-      );
       setRewardClaiming(false);
       setMissionClaimed(true);
     }, 1200);
   };
 
   // Mock historic data for the last 7 days
-  const dailyHours = [1.2, 2.4, 0.8, 3.2, 2.0, 4.5, 3.0];
+  const dailyHours = IS_DEVELOPMENT 
+    ? [1.2, 2.4, 0.8, 3.2, 2.0, 4.5, 3.0] 
+    : [0, 0, 0, 0, 0, 0, (streakState.totalFocusTime / 60)];
   const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const auraThemes = [
@@ -74,7 +130,7 @@ export default function ProfileTab({
 
   // SVG Coordinates for Areas Spark chart
   // mapping values to Y coords (height is 80, padding 10)
-  const maxVal = Math.max(...dailyHours);
+  const maxVal = Math.max(...dailyHours) || 1;
   const pointsString = dailyHours
     .map((val, idx) => {
       const x = (idx / (dailyHours.length - 1)) * 320 + 20;
@@ -140,13 +196,13 @@ export default function ProfileTab({
           </div>
 
           {/* Biometric rating level indicator */}
-          <span className={`absolute bottom-0 right-1 text-[8px] font-mono px-1.5 py-0.5 rounded-md border text-white font-bold bg-slate-950/80 ${
+          <span className={`absolute bottom-0 right-1 text-[8.5px] font-mono px-2 py-0.5 rounded-md border text-white font-black bg-slate-950/90 ${
             userAuraTheme === 'cyan' ? 'border-cyan-500/40 text-cyan-300' :
             userAuraTheme === 'purple' ? 'border-purple-500/40 text-purple-300' :
             userAuraTheme === 'emerald' ? 'border-emerald-500/40 text-emerald-300' :
             'border-pink-500/40 text-pink-300'
           }`}>
-            LVL 4
+            {currentRank.icon} {currentRank.name.toUpperCase()}
           </span>
         </div>
 
@@ -194,6 +250,47 @@ export default function ProfileTab({
             <span className="text-base font-mono font-bold text-teal-400 tracking-tight mt-1 block">
               {streakState.completedSessions}
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ZENITH ENGINE: REAL-TIME COGNITIVE RANKING */}
+      <div className={`relative mt-5 rounded-[32px] border p-5 transition-all duration-300 ${bgPanel} overflow-hidden`}>
+        <div className={`absolute inset-0 bg-gradient-to-br ${currentRank.bg} pointer-events-none`} />
+        <div className="absolute top-2 right-3 text-[7.5px] font-mono tracking-widest text-slate-500">COGNITIVE_RANK_v1.0</div>
+        
+        <h4 className="text-xs font-sans font-black tracking-tight text-white uppercase flex items-center gap-1.5 mb-3.5">
+          <Award className="w-4 h-4 text-purple-400 animate-pulse" /> Zenith Ranking Engine
+        </h4>
+
+        {/* Big Metrics Display */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="p-3 rounded-2xl bg-slate-950/40 border border-white/5">
+            <span className="block font-mono text-[8px] text-slate-500 uppercase">FINAL RANK SCORE</span>
+            <span className="text-xl font-mono font-black text-white">{finalRankScore} pts</span>
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <span className={`text-[10px] font-sans font-bold ${currentRank.color}`}>{currentRank.icon} {currentRank.name} Division</span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-slate-950/40 border border-white/5">
+            <span className="block font-mono text-[8px] text-slate-500 uppercase">EFFICIENCY RATIO</span>
+            <span className="text-xl font-mono font-black text-cyan-400">{efficiency}%</span>
+            <span className="block text-[8px] text-slate-400 mt-1 uppercase font-mono">Tasks: {totalCompleted}/{totalTasksCountForEfficiency}</span>
+          </div>
+        </div>
+
+        {/* Formulas Breakdown */}
+        <div className="p-3 rounded-2xl bg-slate-950/60 border border-white/5 space-y-2 text-left">
+          <span className="block font-mono text-[8px] text-slate-500 uppercase tracking-widest">RANK ENGINE CALCULATION</span>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[9.5px] font-mono text-slate-300">
+            <div>Base Score:</div>
+            <div className="text-right font-bold text-white">({totalCompleted} × 10) + ({streakDays} × 5) = {baseScore}</div>
+            <div>Efficiency Factor:</div>
+            <div className="text-right font-bold text-white">({totalCompleted} / {totalTasksCountForEfficiency}) = {efficiency}%</div>
+            <div className="col-span-2 border-t border-white/5 my-1" />
+            <div className="text-purple-300 font-bold">Final Rank Formula:</div>
+            <div className="text-right font-bold text-purple-300">{baseScore} × (1 + {efficiency}/100) = {finalRankScore}</div>
           </div>
         </div>
       </div>
@@ -365,7 +462,7 @@ export default function ProfileTab({
         </div>
       </div>
 
-      {/* 3. CORE SVGMORPHIC PRODUCTIVITY HORIZONS CHART */}
+      {/* 3. CORE RECHARTS PRODUCTIVITY HORIZONS CHART */}
       <div className={`relative mt-5 rounded-[32px] border p-5 transition-all duration-300 ${bgPanel} overflow-hidden`}>
         <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 to-transparent pointer-events-none" />
         <div className="flex justify-between items-center mb-4 relative z-10">
@@ -376,60 +473,70 @@ export default function ProfileTab({
           <span className={`text-[8px] font-mono px-2 py-0.5 rounded border text-slate-500 ${bgInnerPanel}`}>7-DAY CYCLE</span>
         </div>
 
-        {/* Custom drawn glass SVG Spark area chart */}
-        <div className="relative h-28 w-full mt-2">
-          <svg className="w-full h-full" viewBox="0 0 360 85" preserveAspectRatio="none">
-            {/* Ambient Area Gradient definition */}
-            <defs>
-              <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.18" />
-                <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
-
-            {/* Horizontal guide grids lines */}
-            <line x1="20" y1="25" x2="340" y2="25" stroke={isLightTheme ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.03)"} strokeWidth="1" strokeDasharray="3" />
-            <line x1="20" y1="52.5" x2="340" y2="52.5" stroke={isLightTheme ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.03)"} strokeWidth="1" strokeDasharray="3" />
-            <line x1="20" y1="80" x2="340" y2="80" stroke={isLightTheme ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.05)"} strokeWidth="1" />
-
-            {/* Area block fill path */}
-            <path d={fillPointsString} fill="url(#chartGradient)" />
-
-            {/* Area stroke boundary curve */}
-            <path
-              d={`M ${pointsString}`}
-              fill="none"
-              stroke="#22d3ee"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              className="drop-shadow-[0_0_6px_rgba(34,211,238,0.5)]"
-            />
-
-            {/* Circular coordinate nodes */}
-            {dailyHours.map((val, idx) => {
-              const x = (idx / (dailyHours.length - 1)) * 320 + 20;
-              const y = 80 - (val / maxVal) * 55;
-              return (
-                <circle
-                  key={`node-${idx}`}
-                  cx={x}
-                  cy={y}
-                  r="3.5"
-                  fill={isLightTheme ? "#ffffff" : "#090f23"}
-                  stroke="#22d3ee"
-                  strokeWidth="2.5"
-                />
-              );
-            })}
-          </svg>
+        {/* Recharts responsive area chart container */}
+        <div className="h-44 w-full mt-2 pr-2" id="recharts_wrapper_container">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart 
+              data={weekdays.map((day, idx) => ({
+                name: day,
+                hours: dailyHours[idx]
+              }))} 
+              margin={{ top: 10, right: 5, left: -25, bottom: 5 }}
+            >
+              <defs>
+                <linearGradient id="rechartsGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.22} />
+                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid 
+                strokeDasharray="3 3" 
+                stroke={isLightTheme ? "rgba(100,116,139,0.08)" : "rgba(255,255,255,0.03)"} 
+                vertical={false} 
+              />
+              <XAxis 
+                dataKey="name" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fill: '#64748b', fontSize: 9, fontFamily: 'monospace' }} 
+              />
+              <YAxis 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(val) => `${val}h`}
+                tick={{ fill: '#64748b', fontSize: 9, fontFamily: 'monospace' }} 
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: isLightTheme ? '#ffffff' : '#090d23', 
+                  borderColor: isLightTheme ? '#e2e8f0' : 'rgba(255,255,255,0.08)',
+                  borderRadius: '16px',
+                  color: isLightTheme ? '#0f172a' : '#e2e8f0',
+                  fontSize: '11px',
+                  fontFamily: 'sans-serif',
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                }} 
+                formatter={(value) => [`${value} hrs`, 'Study Focus']}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="hours" 
+                stroke="#22d3ee" 
+                strokeWidth={2.5} 
+                fillOpacity={1} 
+                fill="url(#rechartsGradient)" 
+                activeDot={{ r: 5, stroke: '#22d3ee', strokeWidth: 1.5, fill: isLightTheme ? '#ffffff' : '#020617' }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
 
         {/* weekday titles grids */}
-        <div className="grid grid-cols-7 text-center text-[9px] font-mono text-slate-500 font-medium px-2.5 mt-2">
+        <div className="grid grid-cols-7 text-center text-[9px] font-mono text-slate-500 font-medium px-1 mt-2.5 pt-2 border-t border-dashed border-slate-500/10">
           {weekdays.map((day, idx) => (
             <div key={`day-label-${idx}`}>
               <p>{day}</p>
-              <p className="text-[8px] text-cyan-500 font-bold mt-0.5">{dailyHours[idx]}h</p>
+              <p className="text-[8.5px] text-cyan-400 font-bold mt-0.5">{dailyHours[idx]}h</p>
             </div>
           ))}
         </div>
@@ -586,6 +693,66 @@ export default function ProfileTab({
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* 5. COGNITIVE SYSTEM RESET (CLEAN SLATE PROTOCOL) */}
+      <div className={`relative mt-5 rounded-[32px] border p-5 transition-all duration-300 bg-red-950/15 border-red-500/10 overflow-hidden`}>
+        <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 to-transparent pointer-events-none" />
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <ShieldAlert className="w-4 h-4 text-red-400 animate-pulse" />
+          <span className="text-[10px] font-mono tracking-widest text-red-400 font-extrabold uppercase">OS MAINTENANCE</span>
+        </div>
+
+        <p className="text-[9.5px] font-sans text-slate-400 leading-normal mb-3">
+          Sign out of your active Zenith Core workspace, or initiate the Clean Slate Protocol to wipe cached settings and recalibrate focus streaking.
+        </p>
+
+        <div className="flex flex-col gap-2.5">
+          {onLogout && (
+            <button
+              id="btn_os_logout"
+              type="button"
+              onClick={onLogout}
+              className="w-full py-2.5 rounded-2xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-slate-200 hover:text-white text-[10px] font-mono uppercase font-black tracking-widest transition-all cursor-pointer text-center"
+            >
+              🚪 Sign Out of Zenith Core
+            </button>
+          )}
+
+          {!showConfirmReset ? (
+            <button
+              id="btn_clean_slate_protocol"
+              type="button"
+              onClick={() => setShowConfirmReset(true)}
+              className="w-full py-2.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-mono uppercase font-black tracking-widest border border-red-500/20 transition-all cursor-pointer text-center"
+            >
+              🚨 Run Clean Slate Protocol
+            </button>
+          ) : (
+            <div className="space-y-2 p-2 rounded-xl bg-red-950/30 border border-red-500/20">
+              <p className="text-[9px] font-mono text-red-300 uppercase font-black text-center">CONFIRM SYSTEM RESET?</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCleanSlate();
+                    setShowConfirmReset(false);
+                  }}
+                  className="flex-1 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-slate-950 text-[9px] font-mono uppercase font-black transition-all cursor-pointer text-center"
+                >
+                  YES, RESET
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmReset(false)}
+                  className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white text-[9px] font-mono uppercase font-black transition-all cursor-pointer text-center border border-white/5"
+                >
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>

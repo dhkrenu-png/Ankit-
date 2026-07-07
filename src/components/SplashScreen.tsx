@@ -17,11 +17,11 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
   const loadingSteps = [
-    'Setting up focus timer parameters...',
-    'Loading dashboard layouts...',
-    'Preparing lofi stream & audio synth...',
-    'Updating local calendar & weather...',
-    'StudySphere X is ready.'
+    'Initializing Zenith Neural Core...',
+    'Activating Hyper-Focus Engine & Atomic Progress matrices...',
+    'Deploying ML-based Guardian Filter notification shield...',
+    'Synching Sentinel AI Savage Personality matrices...',
+    'Aura refraction modules synchronized. ZENITH is ready.'
   ];
 
   // Particle generation
@@ -136,16 +136,21 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
 
         {/* Title Header */}
         <motion.div
-          className="text-center mt-8 space-y-2"
+          className="text-center mt-8 space-y-3"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.8 }}
         >
-          <h1 className="text-3xl font-sans tracking-[0.10em] text-white font-medium flex items-center justify-center gap-1.5 uppercase">
-            STUDY<span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400 font-extrabold">SPHERE X</span>
+          <div className="inline-flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-400/20 px-3 py-1 rounded-full mb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+            <span className="text-[8px] font-mono uppercase tracking-widest text-cyan-300 font-bold">Cognitive Core Active</span>
+          </div>
+          <h1 className="text-4xl font-sans tracking-[0.15em] text-white font-extrabold flex flex-col items-center justify-center gap-1 uppercase">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-indigo-400">ZENITH</span>
+            <span className="text-xs font-mono tracking-[0.3em] text-slate-400 font-medium mt-1">THE COGNITIVE OS</span>
           </h1>
-          <p className="text-[8.5px] font-mono tracking-widest text-slate-400 uppercase">
-            Futuristic AI Learning Universe &bull; v1.1.0
+          <p className="text-[10px] font-mono italic tracking-wide text-slate-300 max-w-[280px] mx-auto leading-relaxed">
+            "Stop existing. Start directing your reality."
           </p>
         </motion.div>
 
